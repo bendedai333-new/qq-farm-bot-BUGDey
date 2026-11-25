@@ -2381,6 +2381,16 @@ async function handleApiCallInScene(msg) {
                 result = await getSweetPotatoShop(args[0]);
                 break;
             }
+            case 'claimSweetPotatoSeed': {
+                const { claimSweetPotatoSeed } = require('../services/sweet-potato');
+                result = await claimSweetPotatoSeed();
+                break;
+            }
+            case 'sellSweetPotato': {
+                const { sellSweetPotato } = require('../services/sweet-potato');
+                result = await sellSweetPotato(args[0]);
+                break;
+            }
             case 'buyRainPoemCollectionBottle': {
                 const { buyRainPoemCollectionBottle } = require('../services/activity');
                 result = await buyRainPoemCollectionBottle();

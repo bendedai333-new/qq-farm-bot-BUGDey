@@ -69,6 +69,34 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  // 领每日红薯种子（cmd 91）。lead: 已领过会直接 skipped，不会重复提交。
+  app.post('/api/activity/sweet-potato/claim-seed', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '领取红薯种子失败: 账号未运行')) return;
+      res.json({ ok: true, data: await provider.claimSweetPotatoSeed(accountId) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  // 出售蜜薯（cmd 93）。body: { count, targetGid?, expectedUnitPrice? }
+  app.post('/api/activity/sweet-potato/sell', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '出售蜜薯失败: 账号未运行')) return;
+      const body = req.body || {};
+      res.json({
+        ok: true,
+        data: await provider.sellSweetPotato(accountId, {
+          count: body.count,
+          targetGid: body.targetGid,
+          expectedUnitPrice: body.expectedUnitPrice,
+        }),
+      });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.get('/api/activity/pet-diary', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;

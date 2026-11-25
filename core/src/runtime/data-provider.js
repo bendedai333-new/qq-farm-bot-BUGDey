@@ -278,6 +278,8 @@ function createDataProvider(deps) {
         getRainPoemActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getRainPoemActivity'),
         getSweetPotatoActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getSweetPotatoActivity'),
         getSweetPotatoShop: (ref, gid) => callWorkerApi(resolveAccountId(ref), 'getSweetPotatoShop', gid),
+        claimSweetPotatoSeed: (ref) => callWorkerApi(resolveAccountId(ref), 'claimSweetPotatoSeed'),
+        sellSweetPotato: (ref, payload) => callWorkerApi(resolveAccountId(ref), 'sellSweetPotato', payload || {}),
         buyRainPoemCollectionBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'buyRainPoemCollectionBottle'),
         collectRainPoemWeather: (ref) => callWorkerApi(resolveAccountId(ref), 'collectRainPoemWeather'),
         useRainPoemSummonBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'useRainPoemSummonBottle'),

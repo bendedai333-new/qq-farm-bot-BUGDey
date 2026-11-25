@@ -199,4 +199,120 @@ async function getSweetPotatoShop(targetGid) {
     };
 }
 
-module.exports = { getSweetPotatoActivity, getSweetPotatoShop };
+// ---------- 写操作 ----------
+// 所有写操作串行执行，且“回包认不出结果”一律报 RESULT_UNKNOWN 并停止，禁止自动重试。
+
+let mutationTail = Promise.resolve();
+function withMutationLock(fn) {
+    const run = mutationTail.then(fn, fn);
+    mutationTail = run.then(() => undefined, () => undefined);
+    return run;
+}
+
+async function claimSweetPotatoSeed() {
+    return withMutationLock(async () => {
+        const before = await getSweetPotatoActivity();
+        if (!before.active) {
+            fail('SWEET_POTATO_INACTIVE', `领种子失败：活动当前阶段 ${  before.phase}`);
+        }
+        if (before.seedClaimed) {
+            return { status: 'skipped', reason: 'already_claimed', activity: before };
+        }
+        const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
+            id: ACTIVITY_ID,
+            cmd: 91,
+            maple_market_claim_seed: {},
+        }, 'SweetPotatoOperateReply');
+        if (toNum(reply.cmd) !== 91) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', `领种子回包 cmd 不匹配（期望 91，实际 ${  toNum(reply.cmd)  }）`);
+        }
+        const result = reply.maple_market_claim_seed;
+        if (!result || !result.seed) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', '领种子回包缺少 seed（字段 191 未命中，请核对协议）');
+        }
+        const seedId = toNum(result.seed.id);
+        const seedCount = toNum(result.seed.count);
+        const body = reply.data && reply.data.maple_market ? reply.data.maple_market : null;
+        const claimed = !!(body && body.daily_state && body.daily_state.seed_claimed === true);
+        if (seedId !== SEED_ITEM_ID || seedCount <= 0 || !claimed) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN',
+                `领种子结果待核对（种子 ${  seedId  } x${  seedCount  }，claimed=${  claimed  }），请刷新活动状态，不要重复提交`);
+        }
+        const after = await getSweetPotatoActivity();
+        return { status: 'confirmed', seed: { id: seedId, count: seedCount }, bag: after.bag, activity: after };
+    });
+}
+
+async function sellSweetPotato(input) {
+    const options = input || {};
+    const count = toNum(options.count);
+    const targetGid = options.targetGid ? String(options.targetGid) : '';
+    const expectedUnitPrice = options.expectedUnitPrice === undefined || options.expectedUnitPrice === null
+        ? 0
+        : toNum(options.expectedUnitPrice);
+    if (!Number.isSafeInteger(count) || count < 1) {
+        fail('INVALID_SWEET_POTATO_SALE', '出售数量无效（需要 ≥1 的整数）');
+    }
+    return withMutationLock(async () => {
+        const before = await getSweetPotatoActivity();
+        if (!before.active) {
+            fail('SWEET_POTATO_INACTIVE', `出售失败：活动当前阶段 ${  before.phase}`);
+        }
+        const quote = await getSweetPotatoShop(targetGid || undefined);
+        if (!quote.canSell) {
+            fail('SWEET_POTATO_SALE_UNAVAILABLE', '该铺子当前不接受蜜薯');
+        }
+        if (expectedUnitPrice > 0 && quote.unitPrice !== expectedUnitPrice) {
+            fail('SWEET_POTATO_PRICE_CHANGED',
+                `收购价已变化（提交时 ${  expectedUnitPrice  }，当前 ${  quote.unitPrice  }），请刷新后重新确认`);
+        }
+        if (targetGid && count > quote.remainQuota) {
+            fail('SWEET_POTATO_QUOTA_CHANGED', `好友铺子剩余接收额度不足（剩余 ${  quote.remainQuota  }）`);
+        }
+        // 写前重新读背包：活动状态里的 bag 可能因缓存/失败而为 0，不能作为唯一依据
+        const bag = await readBagCounts();
+        if (count > bag.crop) {
+            fail('SWEET_POTATO_STOCK_CHANGED', `可用蜜薯不足（背包 ${  bag.crop  }，本次 ${  count  }）`);
+        }
+        const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
+            id: ACTIVITY_ID,
+            cmd: 93,
+            maple_market_sell: { target_gid: quote.targetGid, sell_count: count },
+        }, 'SweetPotatoOperateReply');
+        if (toNum(reply.cmd) !== 93) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', `出售回包 cmd 不匹配（期望 93，实际 ${  toNum(reply.cmd)  }）`);
+        }
+        const result = reply.maple_market_sell;
+        if (!result) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', '出售回包缺少结果（字段 193 未命中，请核对协议）');
+        }
+        const sold = toNum(result.sold_count);
+        const unitPrice = toNum(result.final_price);
+        const income = toNum(result.activity_coin_income);
+        const coinBalance = toNum(result.activity_coin);
+        const body = reply.data && reply.data.maple_market ? reply.data.maple_market : null;
+        const consistent = sold === count
+            && unitPrice > 0
+            && income === sold * unitPrice
+            && !!body
+            && toNum(body.activity_coin) === coinBalance;
+        if (!consistent) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN',
+                `出售结果待核对（成交 ${  sold  }，单价 ${  unitPrice  }，收入 ${  income  }），请刷新活动状态后再决定是否重试`);
+        }
+        const after = await getSweetPotatoActivity();
+        return {
+            status: 'confirmed',
+            sold,
+            unitPrice,
+            income,
+            coinBalance,
+            remainQuota: targetGid ? toNum(result.remain_quota) : null,
+            bag: after.bag,
+            activity: after,
+        };
+    });
+}
+
+module.exports = { getSweetPotatoActivity, getSweetPotatoShop, claimSweetPotatoSeed, sellSweetPotato };
+

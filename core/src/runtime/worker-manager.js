@@ -62,6 +62,9 @@ function createWorkerManager(deps) {
         // 以薯换福：读活动组 + 读背包，两次网关往返，10 秒默认值偏紧。
         getSweetPotatoActivity: 30000,
         getSweetPotatoShop: 30000,
+        // 写操作：读组 → 查价 → 读背包 → 提交 → 重读，串行多次 RPC。
+        claimSweetPotatoSeed: 60000,
+        sellSweetPotato: 60000,
         operatePetDiary: 180000,
         // 牧歌初启一次操作 = 读快照 → 提交 → 再读快照，10 秒默认值会误判超时。
         getMugeActivity: 90000,
