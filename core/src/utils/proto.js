@@ -55,6 +55,7 @@ async function loadProto() {
         getResourcePath('proto', 'skinpb.proto'),
         getResourcePath('proto', 'avatarframepb.proto'),
         getResourcePath('proto', 'muge.proto'),
+        getResourcePath('proto', 'sweet-potato.proto'),
     ], { keepCase: true });
 
     for (const name of ['MilkTeaOperateRequest', 'MilkTeaOperateReply', 'MilkTeaGetGroupReply']) {
@@ -63,6 +64,11 @@ async function loadProto() {
 
     // 牧歌初启（muge.proto 自带 Muge* 系列，和 activitypb 的 List/Operate 共用服务名）
     for (const name of ['MugeListReply', 'MugeOperateRequest', 'MugeOperateReply']) {
+        types[name] = root.lookupType(`gamepb.activitypb.${name}`);
+    }
+
+    // 以薯换福（sweet-potato.proto，独立 Request/Reply，避开共用 activitypb.proto）
+    for (const name of ['SweetPotatoGroupReply', 'SweetPotatoOperateRequest', 'SweetPotatoOperateReply']) {
         types[name] = root.lookupType(`gamepb.activitypb.${name}`);
     }
 
