@@ -201,6 +201,18 @@ async function runFarmOperation(opType) {
     }
   }
 
+  // 以薯换福：每日领种子 + 蜜薯自动出售（默认关闭；内部有 5 分钟节流，失败不影响巡田）
+  if (opType === 'all') {
+    try {
+      const sweetPotato = require('./sweet-potato');
+      if (sweetPotato.autoPartEnabled()) {
+        await sweetPotato.runSweetPotatoAutomation();
+      }
+    } catch (eventError) {
+      logWarn('以薯换福', `自动流程跳过：${eventError.message}`);
+    }
+  }
+
   // ── 种植 ──
   if (!warehouseFull && (opType === 'all' || opType === 'plant')) {
     const emptyLands = [...new Set(analysis.empty)];
@@ -216,7 +228,23 @@ async function runFarmOperation(opType) {
     const shouldRefresh2x2 = shouldRefresh2x2Plan && getPrioritize2x2Crops();
     if (deadLands.length > 0 || emptyLands.length > 0 || shouldRefresh2x2) {
       try {
-        const plantResult = await autoPlantEmptyLands(deadLands, emptyLands, lands);
+        // 以薯换福：活动期优先占用空地种红薯，剩余空地再走原有策略。
+        // 默认关闭（automation.sweet_potato 不为 true 时直接跳过），不影响现有种植行为。
+        let plantEmptyLands = emptyLands;
+        let sweetPotatoPlanted = 0;
+        try {
+          const sweetPotato = require('./sweet-potato');
+          if (sweetPotato.autoPartEnabled('plant')) {
+            const eventResult = await sweetPotato.autoPlantSweetPotato(plantEmptyLands);
+            if (eventResult && eventResult.planted > 0) {
+              sweetPotatoPlanted = eventResult.planted;
+              plantEmptyLands = eventResult.remainingLandIds;
+            }
+          }
+        } catch (eventError) {
+          logWarn('以薯换福', `红薯补种跳过：${eventError.message}`);
+        }
+        const plantResult = await autoPlantEmptyLands(deadLands, plantEmptyLands, lands);
         const removedCount = Number(plantResult && plantResult.removedCount) || 0;
         const plantedCount = Number(plantResult && (plantResult.occupiedCount || plantResult.plantedCount)) || 0;
         if (removedCount > 0) {
@@ -225,6 +253,9 @@ async function runFarmOperation(opType) {
         if (plantedCount > 0) {
           actions.push(`种植${  plantedCount}`);
           recordOperation('plant', plantedCount);
+        }
+        if (sweetPotatoPlanted > 0) {
+          actions.push(`红薯${  sweetPotatoPlanted}`);
         }
       } catch (err) {
         logWarn('种植', err.message);

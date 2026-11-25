@@ -602,6 +602,68 @@ async function getSweetPotatoFriendShops(input) {
     return { shops, total: friends.length, offset, limit, hasMore: offset + limit < friends.length };
 }
 
+// ---------- 自动化（默认全关，需显式开启 sweet_potato 才生效） ----------
+
+const AUTO_SELL_INTERVAL_MS = 5 * 60 * 1000;
+let lastAutoSellAt = 0;
+
+function autoPartEnabled(part) {
+    const store = require('../models/store');
+    const automation = (typeof store.getAutomation === 'function' ? store.getAutomation() : {}) || {};
+    if (automation.sweet_potato !== true) return false;
+    if (part && automation[`sweet_potato_${  part}`] === false) return false;
+    return true;
+}
+
+async function autoPlantSweetPotato(emptyLandIds) {
+    const list = Array.isArray(emptyLandIds) ? emptyLandIds.map((id) => toNum(id)).filter(Boolean) : [];
+    const skipped = { planted: 0, plantedLandIds: [], remainingLandIds: list };
+    if (!list.length || !autoPartEnabled('plant')) return skipped;
+    const activity = await getSweetPotatoActivity();
+    if (!activity.active || activity.bag.seed <= 0) return skipped;
+    const want = Math.min(list.length, activity.bag.seed);
+    const result = await plantSeeds(SEED_ITEM_ID, list.slice(0, want), { maxPlantCount: want });
+    const plantedIds = (result.plantedLandIds || []).map((id) => toNum(id));
+    return {
+        planted: result.planted || 0,
+        plantedLandIds: plantedIds,
+        remainingLandIds: list.filter((id) => !plantedIds.includes(id)),
+    };
+}
+
+async function autoClaimSweetPotatoSeed() {
+    if (!autoPartEnabled('claim')) return null;
+    const activity = await getSweetPotatoActivity();
+    if (!activity.active || activity.seedClaimed) return null;
+    return claimSweetPotatoSeed();
+}
+
+async function autoSellSweetPotato() {
+    if (!autoPartEnabled('sell')) return null;
+    const now = getServerTimeSec() * 1000;
+    if (now - lastAutoSellAt < AUTO_SELL_INTERVAL_MS) return null;
+    const activity = await getSweetPotatoActivity();
+    if (!activity.active || activity.bag.crop <= 0) return null;
+    lastAutoSellAt = now;
+    return sellSweetPotato({ count: activity.bag.crop });
+}
+
+/** 供农场巡田周期调用：领种子 + 卖蜜薯（内部有节流，失败不影响主流程）。 */
+async function runSweetPotatoAutomation() {
+    const result = { claim: null, sell: null, errors: [] };
+    try {
+        result.claim = await autoClaimSweetPotatoSeed();
+    } catch (error) {
+        result.errors.push(`claim: ${  error && error.message}`);
+    }
+    try {
+        result.sell = await autoSellSweetPotato();
+    } catch (error) {
+        result.errors.push(`sell: ${  error && error.message}`);
+    }
+    return result;
+}
+
 module.exports = {
     getSweetPotatoActivity,
     getSweetPotatoShop,
@@ -614,5 +676,8 @@ module.exports = {
     getSweetPotatoPurchaseLog,
     claimSweetPotatoCommission,
     getSweetPotatoFriendShops,
+    autoPlantSweetPotato,
+    runSweetPotatoAutomation,
+    autoPartEnabled,
 };
 
