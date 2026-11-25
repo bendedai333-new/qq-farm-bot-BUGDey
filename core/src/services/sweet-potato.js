@@ -446,6 +446,17 @@ function itemDto(row) {
     };
 }
 
+// 商品名提示：来自另一份实现的抓包配置（1~6），仅用于展示用；
+// 真实获得物以兑换回包的 items 为准。
+const GOODS_HINTS = {
+    1: { name: '盆栽·七色花弦', items: [{ id: 204013, count: 1 }] },
+    2: { name: '福气金豆礼包', items: [{ id: 101627, count: 1 }] },
+    3: { name: '金币果种子', items: [{ id: 20522, count: 1 }] },
+    4: { name: '经验蘑菇种子', items: [{ id: 20523, count: 1 }] },
+    5: { name: '有机化肥(1小时)', items: [{ id: 80011, count: 1 }] },
+    6: { name: '南瓜种子礼包', items: [{ id: 101620, count: 1 }] },
+};
+
 async function getGoodsCatalog() {
     const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
         id: ACTIVITY_ID,
@@ -463,8 +474,12 @@ async function getGoodsCatalog() {
         const limitType = toNum(row.limit_type);
         const purchased = toNum(limitType === 1 ? row.purchased_daily : row.purchased_total);
         const limitTimes = limitType > 0 ? toNum(row.limit_times) : null;
+        const goodsId = toNum(row.goods_id);
+        const hint = GOODS_HINTS[goodsId] || null;
         return {
-            id: toNum(row.goods_id),
+            id: goodsId,
+            name: hint ? hint.name : '',
+            items: hint ? hint.items.map(itemDto) : [],
             price: toNum(row.activity_coin_price),
             limitType,
             limitTimes,
@@ -488,7 +503,8 @@ async function exchangeSweetPotatoGoods(input) {
         const catalog = await getGoodsCatalog();
         const goods = catalog.goods.find((row) => row.id === goodsId);
         if (!goods) fail('SWEET_POTATO_GOODS_NOT_FOUND', `商品 ${  goodsId  } 不在当前目录中`);
-        if (!goods.exchangeable) fail('SWEET_POTATO_GOODS_LOCKED', `商品 ${  goodsId  } 当前不可兑换`);
+        // 不把 exchangeable 当硬门禁：该位由服务端按余额/限购即时计算，可能滞后。
+        // 余额与限购在下面本地预检，真正的拒绝交给服务端。
         if (goods.remaining !== null && count > goods.remaining) {
             fail('SWEET_POTATO_GOODS_LIMIT', `兑换数量超出限购（剩余 ${  goods.remaining  }）`);
         }

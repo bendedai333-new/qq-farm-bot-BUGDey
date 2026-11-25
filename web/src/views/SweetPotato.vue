@@ -27,6 +27,8 @@ interface SweetPotatoActivity {
 
 interface SweetPotatoGoods {
   id: number
+  name?: string
+  items?: Array<{ id: number, name?: string, count: number }>
   price: number
   limitType: number
   limitTimes: number | null
@@ -212,6 +214,31 @@ async function sellAll() {
   if (data?.ok) {
     toast.success(`卖出 ${data.data.sold} 个，+${data.data.income} 福气币`)
     await loadActivity()
+  }
+  else if (data?.error) {
+    toast.error(data.error)
+  }
+}
+
+async function exchangeGoods(item: SweetPotatoGoods) {
+  const label = item.name ? item.name : (`商品 #${item.id}`)
+  const maxCount = item.remaining ?? 1
+  const input = window.prompt(`兑换「${label}」数量（单价 ${item.price} 福气币，剩余 ${maxCount}）：`, '1')
+  if (input === null)
+    return
+  const count = Number(input)
+  if (!Number.isInteger(count) || count < 1) {
+    toast.warning('请输入 ≥1 的整数')
+    return
+  }
+  const cost = item.price * count
+  if (!window.confirm(`确认花费 ${cost} 福气币兑换 ${count} 个「${label}」？`))
+    return
+  const data = await post('/exchange', { goodsId: item.id, count })
+  if (data?.ok) {
+    const items = (data.data?.items || []).map((row: { name?: string, id: number, count: number }) => `${row.name || (`#${row.id}`)} ×${row.count}`).join('、')
+    toast.success(`兑换成功：${items || '已到账'}，花费 ${data.data?.cost}`)
+    await Promise.all([loadActivity(), loadGoods()])
   }
   else if (data?.error) {
     toast.error(data.error)
@@ -422,12 +449,15 @@ onMounted(async () => {
             <th class="text-right">
               状态
             </th>
+            <th class="text-right">
+              操作
+            </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="item in goods" :key="item.id" class="border-t">
             <td class="py-1">
-              #{{ item.id }}
+              {{ item.name || (`#${item.id}`) }}
             </td>
             <td class="text-right">
               {{ item.price }}
@@ -441,16 +471,25 @@ onMounted(async () => {
             <td class="text-right text-xs">
               {{ item.exchangeable ? '可兑换' : '不可兑换' }}
             </td>
+            <td class="text-right">
+              <button
+                class="border rounded px-2 py-0.5 text-xs"
+                :disabled="!!busy || (item.remaining !== null && item.remaining <= 0)"
+                @click="exchangeGoods(item)"
+              >
+                兑换
+              </button>
+            </td>
           </tr>
           <tr v-if="!goods.length">
-            <td colspan="5" class="py-3 text-center text-xs opacity-60">
+            <td colspan="6" class="py-3 text-center text-xs opacity-60">
               暂无数据
             </td>
           </tr>
         </tbody>
       </table>
       <p class="mt-2 text-xs opacity-50">
-        兑换会真实消耗福气币，页面暂不提供一键兑换。
+        兑换会真实消耗福气币，点击后会先确认数量与总价；实际获得物以服务端回包为准，展示的商品名来自抓包提示（1~6），7 号以后只显示编号。
       </p>
     </section>
 
