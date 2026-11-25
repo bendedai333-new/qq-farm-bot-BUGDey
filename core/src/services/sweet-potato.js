@@ -650,6 +650,36 @@ async function autoClaimSweetPotatoSeed() {
     return claimSweetPotatoSeed();
 }
 
+// 好友铺子报价缓存：自动化每 5 分钟才查一次，避免频繁打 92
+let bestShopCache = null;
+
+/** 从好友铺子里挑一个「单价高于自家 + 额度够」的最优铺子；没有就返回 null。 */
+async function pickBestShop(count, ownUnitPrice) {
+    const now = getServerTimeSec() * 1000;
+    if (bestShopCache && now - bestShopCache.at < 5 * 60 * 1000) {
+        const cached = bestShopCache.shop;
+        if (!cached) return null;
+        if (cached.unitPrice > ownUnitPrice && (cached.remainQuota == null || cached.remainQuota >= count)) return cached;
+        return null;
+    }
+    let best = null;
+    try {
+        const page = await getSweetPotatoFriendShops({ limit: 10, offset: 0 });
+        for (const shop of page.shops) {
+            if (!shop || shop.available === false) continue;
+            if (shop.unitPrice === null || shop.unitPrice === undefined) continue;
+            if (shop.canSell !== true) continue;
+            if (shop.unitPrice <= ownUnitPrice) continue;
+            if (shop.remainQuota !== null && shop.remainQuota !== undefined && shop.remainQuota < count) continue;
+            if (!best || shop.unitPrice > best.unitPrice) best = shop;
+        }
+    } catch {
+        best = null;
+    }
+    bestShopCache = { at: now, shop: best };
+    return best;
+}
+
 async function autoSellSweetPotato() {
     if (!autoPartEnabled('sell')) return null;
     const now = getServerTimeSec() * 1000;
@@ -657,7 +687,23 @@ async function autoSellSweetPotato() {
     const activity = await getSweetPotatoActivity();
     if (!activity.active || activity.bag.crop <= 0) return null;
     lastAutoSellAt = now;
-    return sellSweetPotato({ count: activity.bag.crop });
+    const count = activity.bag.crop;
+    // 先找好友高价铺子；找不到或不如自家，就卖自家（不限量）
+    let best = null;
+    try {
+        best = await pickBestShop(count, activity.price.unit);
+    } catch {
+        best = null;
+    }
+    if (best) {
+        try {
+            return await sellSweetPotato({ count, targetGid: best.targetGid, expectedUnitPrice: best.unitPrice });
+        } catch {
+            // 好友铺子失败就退回自家，别让一轮失败卡住
+            return sellSweetPotato({ count });
+        }
+    }
+    return sellSweetPotato({ count });
 }
 
 /** 供农场巡田周期调用：领种子 + 卖蜜薯（内部有节流，失败不影响主流程）。 */
@@ -690,6 +736,7 @@ module.exports = {
     getSweetPotatoFriendShops,
     autoPlantSweetPotato,
     runSweetPotatoAutomation,
+    pickBestShop,
     autoPartEnabled,
 };
 

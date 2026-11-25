@@ -172,6 +172,36 @@ async function harvestPotato() {
   }
 }
 
+// 当前可用的最高价好友铺子（单价高于自家且额度够卖完手里所有蜜薯）
+const bestShop = computed(() => {
+  const own = activity.value?.price?.unit ?? 0
+  const count = activity.value?.bag?.crop ?? 0
+  return shops.value
+    .filter(shop => shop.canSell && typeof shop.unitPrice === 'number' && shop.unitPrice > own && (shop.remainQuota == null || shop.remainQuota >= count))
+    .sort((left, right) => (right.unitPrice || 0) - (left.unitPrice || 0))[0] || null
+})
+
+async function sellToBest() {
+  const count = activity.value?.bag?.crop || 0
+  const shop = bestShop.value
+  if (count <= 0) {
+    toast.warning('没有蜜薯可卖')
+    return
+  }
+  if (!shop) {
+    toast.warning('没有比自家更划算的好友铺子')
+    return
+  }
+  const data = await post('/sell', { count, targetGid: shop.targetGid, expectedUnitPrice: shop.unitPrice })
+  if (data?.ok) {
+    toast.success(`卖给 ${shop.name || '好友'} ${data.data.sold} 个，+${data.data.income} 福气币`)
+    await loadActivity()
+  }
+  else if (data?.error) {
+    toast.error(data.error)
+  }
+}
+
 async function sellAll() {
   const count = activity.value?.bag?.crop || 0
   if (count <= 0) {
@@ -285,7 +315,16 @@ onMounted(async () => {
           收获红薯
         </button>
         <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="sellAll">
-          出售全部蜜薯
+          出售全部蜜薯（自家）
+        </button>
+        <button
+          v-if="bestShop"
+          class="rounded-lg px-3 py-1.5 text-sm text-white"
+          style="background: #1565c0"
+          :disabled="!!busy"
+          @click="sellToBest"
+        >
+          卖最高价 {{ bestShop.name || '好友' }}（{{ bestShop.unitPrice }}）
         </button>
         <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="claimCommission">
           领取佣金
