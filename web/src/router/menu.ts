@@ -47,6 +47,13 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Activity.vue'),
   },
   {
+    path: 'sweet-potato',
+    name: 'sweet-potato',
+    label: '以薯换福',
+    icon: 'i-carbon-sprout',
+    component: () => import('@/views/SweetPotato.vue'),
+  },
+  {
     path: 'decorations',
     name: 'decorations',
     label: '装扮',
