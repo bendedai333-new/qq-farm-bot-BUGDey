@@ -65,6 +65,14 @@ function createWorkerManager(deps) {
         // 写操作：读组 → 查价 → 读背包 → 提交 → 重读，串行多次 RPC。
         claimSweetPotatoSeed: 60000,
         sellSweetPotato: 60000,
+        plantSweetPotato: 120000,
+        harvestSweetPotato: 120000,
+        getSweetPotatoGoods: 30000,
+        exchangeSweetPotatoGoods: 60000,
+        getSweetPotatoPurchaseLog: 30000,
+        claimSweetPotatoCommission: 60000,
+        // 好友铺子逐个查询，最多 10 个，每个一次网关往返。
+        getSweetPotatoFriendShops: 120000,
         operatePetDiary: 180000,
         // 牧歌初启一次操作 = 读快照 → 提交 → 再读快照，10 秒默认值会误判超时。
         getMugeActivity: 90000,

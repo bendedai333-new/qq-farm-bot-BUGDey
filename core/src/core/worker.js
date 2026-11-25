@@ -2391,6 +2391,41 @@ async function handleApiCallInScene(msg) {
                 result = await sellSweetPotato(args[0]);
                 break;
             }
+            case 'plantSweetPotato': {
+                const { plantSweetPotato } = require('../services/sweet-potato');
+                result = await plantSweetPotato(args[0]);
+                break;
+            }
+            case 'harvestSweetPotato': {
+                const { harvestSweetPotato } = require('../services/sweet-potato');
+                result = await harvestSweetPotato();
+                break;
+            }
+            case 'getSweetPotatoGoods': {
+                const { getGoodsCatalog } = require('../services/sweet-potato');
+                result = await getGoodsCatalog();
+                break;
+            }
+            case 'exchangeSweetPotatoGoods': {
+                const { exchangeSweetPotatoGoods } = require('../services/sweet-potato');
+                result = await exchangeSweetPotatoGoods(args[0]);
+                break;
+            }
+            case 'getSweetPotatoPurchaseLog': {
+                const { getSweetPotatoPurchaseLog } = require('../services/sweet-potato');
+                result = await getSweetPotatoPurchaseLog();
+                break;
+            }
+            case 'claimSweetPotatoCommission': {
+                const { claimSweetPotatoCommission } = require('../services/sweet-potato');
+                result = await claimSweetPotatoCommission();
+                break;
+            }
+            case 'getSweetPotatoFriendShops': {
+                const { getSweetPotatoFriendShops } = require('../services/sweet-potato');
+                result = await getSweetPotatoFriendShops(args[0]);
+                break;
+            }
             case 'buyRainPoemCollectionBottle': {
                 const { buyRainPoemCollectionBottle } = require('../services/activity');
                 result = await buyRainPoemCollectionBottle();

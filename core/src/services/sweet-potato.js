@@ -13,8 +13,13 @@
  */
 const { types } = require('../utils/proto');
 const { sendMsgAsync, getUserState } = require('../utils/network');
-const { toNum, getServerTimeSec } = require('../utils/utils');
+const { toNum, getServerTimeSec, toLong } = require('../utils/utils');
 const { getBag, getBagItems } = require('./warehouse');
+const { getItemById, getItemImageById } = require('../config/gameConfig');
+const { getFriendsList } = require('./friend');
+const farmApi = require('./farm-api');
+const { analyzeLands } = require('./farm-land-analyzer');
+const { plantSeeds } = require('./planting-service');
 
 const SERVICE = 'gamepb.activitypb.ActivityService';
 
@@ -314,5 +319,300 @@ async function sellSweetPotato(input) {
     });
 }
 
-module.exports = { getSweetPotatoActivity, getSweetPotatoShop, claimSweetPotatoSeed, sellSweetPotato };
+// 红薯作物 ID（抓包确认：seed 20307 → plant 1020307）
+const SWEET_POTATO_PLANT_ID = 1020307;
+
+async function plantSweetPotato(input) {
+    const options = input || {};
+    const maxCount = options.maxCount ? Math.max(1, toNum(options.maxCount)) : 0;
+    return withMutationLock(async () => {
+        const before = await getSweetPotatoActivity();
+        if (!before.active) {
+            fail('SWEET_POTATO_INACTIVE', `种植失败：活动当前阶段 ${  before.phase}`);
+        }
+        if (before.bag.seed <= 0) {
+            return { status: 'skipped', reason: 'no_seed', activity: before };
+        }
+        const { lands } = await farmApi.getAllLands();
+        const list = Array.isArray(lands) ? lands : [];
+        const analysis = analyzeLands(list);
+        let emptyIds = analysis.empty.slice();
+        if (Array.isArray(options.landIds) && options.landIds.length) {
+            const allowed = new Set(emptyIds);
+            emptyIds = options.landIds.map((id) => toNum(id)).filter((id) => allowed.has(id));
+        }
+        if (!emptyIds.length) {
+            return { status: 'skipped', reason: 'no_empty_land', activity: before };
+        }
+        const want = Math.min(maxCount > 0 ? maxCount : emptyIds.length, before.bag.seed);
+        const result = await plantSeeds(SEED_ITEM_ID, emptyIds.slice(0, want), { maxPlantCount: want });
+        if (!result.planted) {
+            fail('SWEET_POTATO_PLANT_FAILED', '红薯播种未确认（0 块成功），请刷新土地状态后再试');
+        }
+        const after = await getSweetPotatoActivity();
+        return {
+            status: 'confirmed',
+            planted: result.planted,
+            landIds: result.plantedLandIds,
+            seedLeft: after.bag.seed,
+            activity: after,
+        };
+    });
+}
+
+async function harvestSweetPotato() {
+    return withMutationLock(async () => {
+        const before = await getSweetPotatoActivity();
+        if (!before.active) {
+            fail('SWEET_POTATO_INACTIVE', `收获失败：活动当前阶段 ${  before.phase}`);
+        }
+        const { lands } = await farmApi.getAllLands();
+        const list = Array.isArray(lands) ? lands : [];
+        const ownIds = new Set(
+            list.filter((land) => land && land.plant && toNum(land.plant.id) === SWEET_POTATO_PLANT_ID)
+                .map((land) => toNum(land.id)),
+        );
+        const analysis = analyzeLands(list);
+        const targets = analysis.harvestable.filter((id) => ownIds.has(toNum(id)));
+        const deadIds = analysis.dead.filter((id) => ownIds.has(toNum(id)));
+        let removed = 0;
+        if (deadIds.length) {
+            await farmApi.removePlant(deadIds);
+            removed = deadIds.length;
+        }
+        if (!targets.length) {
+            return {
+                status: 'skipped',
+                reason: removed ? 'only_dead_removed' : 'nothing_mature',
+                removed,
+                activity: before,
+            };
+        }
+        // 不用 farmApi.harvest：它硬编码 is_all=true，可能把全部成熟作物一起收掉。
+        // 这里显式 is_all=false + 只传红薯地块，避免动到其他作物。
+        const ownGid = toLong((getUserState() || {}).gid);
+        const harvestPayload = types.HarvestRequest.encode(types.HarvestRequest.create({
+            land_ids: targets,
+            host_gid: ownGid,
+            is_all: false,
+        })).finish();
+        await sendMsgAsync('gamepb.plantpb.PlantService', 'Harvest', harvestPayload);
+        // 以服务端最新土地状态确认收获，不依赖回包结构
+        const latest = await farmApi.getAllLands();
+        const latestList = Array.isArray(latest && latest.lands) ? latest.lands : [];
+        const stillThere = latestList
+            .filter((land) => land && land.plant && toNum(land.plant.id) === SWEET_POTATO_PLANT_ID)
+            .map((land) => toNum(land.id))
+            .filter((id) => targets.includes(id));
+        if (stillThere.length) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN',
+                `红薯收获状态未确认（仍在成熟的地块: ${  stillThere.join(',')  }），请刷新后再决定是否重试`);
+        }
+        const after = await getSweetPotatoActivity();
+        return {
+            status: 'confirmed',
+            harvested: targets.length,
+            landIds: targets,
+            removed,
+            cropGain: after.bag.crop - before.bag.crop,
+            bag: after.bag,
+            activity: after,
+        };
+    });
+}
+
+// ---------- 兑换商店 / 收购记录 / 佣金 ----------
+
+function itemDto(row) {
+    const id = toNum(row && row.id);
+    const info = getItemById(id) || {};
+    return {
+        id,
+        count: toNum(row && row.count),
+        name: String(info.name || ''),
+        image: getItemImageById(id) || '',
+    };
+}
+
+async function getGoodsCatalog() {
+    const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
+        id: ACTIVITY_ID,
+        cmd: 97,
+        maple_market_get_goods_list: {},
+    }, 'SweetPotatoOperateReply');
+    if (toNum(reply.cmd) !== 97) {
+        fail('SWEET_POTATO_RESULT_UNKNOWN', `商品目录回包 cmd 不匹配（期望 97，实际 ${  toNum(reply.cmd)  }）`);
+    }
+    const result = reply.maple_market_get_goods_list;
+    if (!result) {
+        fail('SWEET_POTATO_RESULT_UNKNOWN', '回包缺少 maple_market_get_goods_list（字段 197 未命中，请核对协议）');
+    }
+    const goods = (Array.isArray(result.goods) ? result.goods : []).map((row) => {
+        const limitType = toNum(row.limit_type);
+        const purchased = toNum(limitType === 1 ? row.purchased_daily : row.purchased_total);
+        const limitTimes = limitType > 0 ? toNum(row.limit_times) : null;
+        return {
+            id: toNum(row.goods_id),
+            price: toNum(row.activity_coin_price),
+            limitType,
+            limitTimes,
+            purchased,
+            remaining: limitTimes === null ? null : Math.max(0, limitTimes - purchased),
+            exchangeable: row.exchangeable === true,
+        };
+    });
+    return { goods, coinBalance: toNum(result.activity_coin) };
+}
+
+async function exchangeSweetPotatoGoods(input) {
+    const options = input || {};
+    const goodsId = toNum(options.goodsId);
+    const count = toNum(options.count);
+    if (!goodsId) fail('INVALID_SWEET_POTATO_GOODS', '商品 ID 无效');
+    if (!Number.isSafeInteger(count) || count < 1) fail('INVALID_SWEET_POTATO_GOODS', '兑换数量无效（需要 ≥1 的整数）');
+    return withMutationLock(async () => {
+        const before = await getSweetPotatoActivity();
+        if (!before.active) fail('SWEET_POTATO_INACTIVE', `兑换失败：活动当前阶段 ${  before.phase}`);
+        const catalog = await getGoodsCatalog();
+        const goods = catalog.goods.find((row) => row.id === goodsId);
+        if (!goods) fail('SWEET_POTATO_GOODS_NOT_FOUND', `商品 ${  goodsId  } 不在当前目录中`);
+        if (!goods.exchangeable) fail('SWEET_POTATO_GOODS_LOCKED', `商品 ${  goodsId  } 当前不可兑换`);
+        if (goods.remaining !== null && count > goods.remaining) {
+            fail('SWEET_POTATO_GOODS_LIMIT', `兑换数量超出限购（剩余 ${  goods.remaining  }）`);
+        }
+        const cost = goods.price * count;
+        if (cost > catalog.coinBalance) {
+            fail('SWEET_POTATO_COIN_NOT_ENOUGH', `福气币不足（需要 ${  cost  }，当前 ${  catalog.coinBalance  }）`);
+        }
+        const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
+            id: ACTIVITY_ID,
+            cmd: 96,
+            maple_market_exchange: { goods_id: goodsId, exchange_count: count },
+        }, 'SweetPotatoOperateReply');
+        if (toNum(reply.cmd) !== 96) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', `兑换回包 cmd 不匹配（期望 96，实际 ${  toNum(reply.cmd)  }）`);
+        }
+        const result = reply.maple_market_exchange;
+        if (!result) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', '回包缺少 maple_market_exchange（字段 196 未命中，请核对协议）');
+        }
+        const paid = toNum(result.activity_coin_cost);
+        const items = (Array.isArray(result.items) ? result.items : []).map(itemDto);
+        const balance = toNum(result.activity_coin);
+        const consistent = paid === cost && items.length > 0 && balance === catalog.coinBalance - cost;
+        if (!consistent) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN',
+                `兑换结果待核对（花费 ${  paid  }，期望 ${  cost  }，余额 ${  balance  }），请刷新活动状态后再决定是否重试`);
+        }
+        return { status: 'confirmed', goodsId, count, cost: paid, items, coinBalance: balance };
+    });
+}
+
+async function getSweetPotatoPurchaseLog() {
+    const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
+        id: ACTIVITY_ID,
+        cmd: 95,
+        maple_market_get_purchase_log: {},
+    }, 'SweetPotatoOperateReply');
+    if (toNum(reply.cmd) !== 95) {
+        fail('SWEET_POTATO_RESULT_UNKNOWN', `收购记录回包 cmd 不匹配（期望 95，实际 ${  toNum(reply.cmd)  }）`);
+    }
+    const result = reply.maple_market_get_purchase_log;
+    if (!result) {
+        fail('SWEET_POTATO_RESULT_UNKNOWN', '回包缺少 maple_market_get_purchase_log（字段 195 未命中，请核对协议）');
+    }
+    const records = (Array.isArray(result.records) ? result.records : []).map((row) => ({
+        timestamp: toNum(row.timestamp) * 1000,
+        sellerGid: String(row.seller_gid || ''),
+        sellerName: String(row.seller_name || ''),
+        sellerLevel: toNum(row.seller_level),
+        soldCount: toNum(row.sold_count),
+        income: toNum(row.income),
+        commission: toNum(row.commission),
+    }));
+    return { records };
+}
+
+async function claimSweetPotatoCommission() {
+    return withMutationLock(async () => {
+        const before = await getSweetPotatoActivity();
+        if (!before.active) fail('SWEET_POTATO_INACTIVE', `领取佣金失败：活动当前阶段 ${  before.phase}`);
+        if (before.pendingCommission.coin <= 0) {
+            return { status: 'skipped', reason: 'nothing_pending', activity: before };
+        }
+        const pendingCoin = before.pendingCommission.coin;
+        const pendingCount = before.pendingCommission.count;
+        const reply = await rpc('Operate', 'SweetPotatoOperateRequest', {
+            id: ACTIVITY_ID,
+            cmd: 99,
+        }, 'SweetPotatoOperateReply');
+        if (toNum(reply.cmd) !== 99) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', `领取佣金回包 cmd 不匹配（期望 99，实际 ${  toNum(reply.cmd)  }）`);
+        }
+        const result = reply.maple_market_claim_commission;
+        if (!result) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN', '回包缺少 maple_market_claim_commission（字段 199 未命中，请核对协议）');
+        }
+        const claimed = toNum(result.claimed_coin);
+        const balance = toNum(result.activity_coin);
+        const consistent = claimed > 0 && claimed <= pendingCoin && balance >= before.coinBalance + claimed;
+        if (!consistent) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN',
+                `佣金领取结果待核对（claimed ${  claimed  }，待领 ${  pendingCoin  }，余额 ${  balance  }），请刷新后再决定是否重试`);
+        }
+        const after = await getSweetPotatoActivity();
+        return { status: 'confirmed', claimed, claimedCount: toNum(result.claimed_count), pendingCount, coinBalance: after.coinBalance, activity: after };
+    });
+}
+
+async function getSweetPotatoFriendShops(input) {
+    const options = input || {};
+    const limit = Math.min(Math.max(1, toNum(options.limit) || 5), 10);
+    const offset = Math.max(0, toNum(options.offset) || 0);
+    const raw = await getFriendsList();
+    const list = Array.isArray(raw) ? raw : (Array.isArray(raw && raw.friends) ? raw.friends : []);
+    const selfGid = String((getUserState() || {}).gid || '');
+    const seen = new Set();
+    const friends = [];
+    for (const row of list) {
+        const gid = String((row && (row.gid || row.gid_str)) || '');
+        if (!gid || gid === selfGid || seen.has(gid)) continue;
+        seen.add(gid);
+        friends.push({ gid, name: String((row && (row.name || row.nick)) || ''), avatar: String((row && (row.avatar_url || row.avatar)) || '') });
+    }
+    const page = friends.slice(offset, offset + limit);
+    const shops = [];
+    for (const friend of page) {
+        try {
+            const quote = await getSweetPotatoShop(friend.gid);
+            shops.push({ ...quote, name: friend.name || quote.owner.name || '', avatar: friend.avatar });
+        } catch (error) {
+            shops.push({
+                targetGid: friend.gid,
+                name: friend.name,
+                avatar: friend.avatar,
+                unitPrice: null,
+                canSell: false,
+                available: false,
+                error: (error && error.message) || '无法读取该铺子',
+            });
+        }
+    }
+    shops.sort((left, right) => (right.unitPrice || 0) - (left.unitPrice || 0));
+    return { shops, total: friends.length, offset, limit, hasMore: offset + limit < friends.length };
+}
+
+module.exports = {
+    getSweetPotatoActivity,
+    getSweetPotatoShop,
+    claimSweetPotatoSeed,
+    sellSweetPotato,
+    plantSweetPotato,
+    harvestSweetPotato,
+    getGoodsCatalog,
+    exchangeSweetPotatoGoods,
+    getSweetPotatoPurchaseLog,
+    claimSweetPotatoCommission,
+    getSweetPotatoFriendShops,
+};
 

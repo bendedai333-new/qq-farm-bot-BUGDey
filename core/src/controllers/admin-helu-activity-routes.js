@@ -31,6 +31,15 @@ function registerAdminHeluActivityRoutes({
     canAccessAccount,
   };
 
+  // 以薯换福的业务拒绝（活动未开放 / 库存不足 / 价格变化）是可预期结果，按 400 返回，不当成服务器故障。
+  function sendSweetPotatoError(res, err) {
+    const code = err && err.code ? String(err.code) : '';
+    if (code.startsWith('SWEET_POTATO_') || code.startsWith('INVALID_SWEET_POTATO')) {
+      return res.status(400).json({ ok: false, code, error: err.message });
+    }
+    return sendProviderError(res, err);
+  }
+
   app.get('/api/activity/rain-poem', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
@@ -76,7 +85,7 @@ function registerAdminHeluActivityRoutes({
     try {
       if (!requireConnectedAccount(res, provider, accountId, '领取红薯种子失败: 账号未运行')) return;
       res.json({ ok: true, data: await provider.claimSweetPotatoSeed(accountId) });
-    } catch (err) { sendProviderError(res, err); }
+    } catch (err) { sendSweetPotatoError(res, err); }
   });
 
   // 出售蜜薯（cmd 93）。body: { count, targetGid?, expectedUnitPrice? }
@@ -94,7 +103,82 @@ function registerAdminHeluActivityRoutes({
           expectedUnitPrice: body.expectedUnitPrice,
         }),
       });
-    } catch (err) { sendProviderError(res, err); }
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 把背包里的红薯种子种到空地（cmd 无关，走 PlantService.Plant）
+  app.post('/api/activity/sweet-potato/plant', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '种植红薯失败: 账号未运行')) return;
+      const body = req.body || {};
+      res.json({ ok: true, data: await provider.plantSweetPotato(accountId, { maxCount: body.maxCount, landIds: body.landIds }) });
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 收获成熟的红薯（顺带清掉枯死的红薯）
+  app.post('/api/activity/sweet-potato/harvest', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '收获红薯失败: 账号未运行')) return;
+      res.json({ ok: true, data: await provider.harvestSweetPotato(accountId) });
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 兑换商店商品目录（cmd 97）
+  app.get('/api/activity/sweet-potato/goods', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取兑换目录失败: 账号未运行')) return;
+      res.json({ ok: true, data: await provider.getSweetPotatoGoods(accountId) });
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 兑换商品（cmd 96）。body: { goodsId, count }
+  app.post('/api/activity/sweet-potato/exchange', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '兑换失败: 账号未运行')) return;
+      const body = req.body || {};
+      res.json({ ok: true, data: await provider.exchangeSweetPotatoGoods(accountId, { goodsId: body.goodsId, count: body.count }) });
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 收购记录（cmd 95）
+  app.get('/api/activity/sweet-potato/purchase-log', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取收购记录失败: 账号未运行')) return;
+      res.json({ ok: true, data: await provider.getSweetPotatoPurchaseLog(accountId) });
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 领取佣金（cmd 99）
+  app.post('/api/activity/sweet-potato/claim-commission', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '领取佣金失败: 账号未运行')) return;
+      res.json({ ok: true, data: await provider.claimSweetPotatoCommission(accountId) });
+    } catch (err) { sendSweetPotatoError(res, err); }
+  });
+
+  // 好友铺子收购价（分页，逐个查询）
+  app.get('/api/activity/sweet-potato/friend-shops', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '查询好友铺子失败: 账号未运行')) return;
+      res.json({
+        ok: true,
+        data: await provider.getSweetPotatoFriendShops(accountId, { limit: req.query.limit, offset: req.query.offset }),
+      });
+    } catch (err) { sendSweetPotatoError(res, err); }
   });
 
   app.get('/api/activity/pet-diary', async (req, res) => {
