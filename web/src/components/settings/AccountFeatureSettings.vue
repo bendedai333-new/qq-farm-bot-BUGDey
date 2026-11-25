@@ -42,6 +42,13 @@ const mugeSettings = [
   { key: 'muge_handbook_claim', label: '自动领取成长手册奖励' },
   { key: 'muge_auto_answer', label: '自动答题并领取' },
 ]
+// 以薯换福：总开关默认关闭，子开关默认开启（只有显式关闭才停）
+const sweetPotatoSettings = [
+  { key: 'sweet_potato', label: '启用自动以薯换福' },
+  { key: 'sweet_potato_claim', label: '自动领取每日红薯种子' },
+  { key: 'sweet_potato_plant', label: '自动种植/收获红薯' },
+  { key: 'sweet_potato_sell', label: '自动出售蜜薯（好友高价优先）' },
+]
 const editSnapshot = ref<{ strategy: any, automation: any } | null>(null)
 const qixiFriends = ref<Array<{ gid: number, name: string }>>([])
 const SHOW_STAR_ACTIVITY = false
@@ -163,6 +170,7 @@ const selectedLandTypeCount = computed(() => Array.isArray(automation.value.auto
 const activityKeys = computed(() => [
   'star_solar_claim',
   ...mugeSettings.map(item => item.key),
+  ...sweetPotatoSettings.map(item => item.key),
   ...(showMilkTeaActivity.value ? ['mall_coupon_gift_buy', 'milk_tea_share', 'milk_tea_cashier', 'milk_tea_wages', 'milk_tea_share_daily', 'milk_tea_share_rewards', 'milk_tea_fund_rewards'] : []),
   ...(showMilkTeaBusiness.value ? ['milk_tea_upgrade', 'milk_tea_craft', 'milk_tea_boost', 'milk_tea_hire', 'milk_tea_work_interact', 'milk_tea_seed_buy'] : []),
   ...(showRainPoemActivity.value
@@ -368,7 +376,10 @@ function finish() {
       : [
           ...activityKeys.value,
           'wish_sign_choice',
-          'milk_tea_hire_duration', 'milk_tea_hire_talent', 'milk_tea_hire_fallback_talent', 'milk_tea_work_interact_type',
+          'milk_tea_hire_duration',
+          'milk_tea_hire_talent',
+          'milk_tea_hire_fallback_talent',
+          'milk_tea_work_interact_type',
           ...(SHOW_STAR_ACTIVITY ? ['star_passport_claim', 'star_record_claim'] : []),
           ...(SHOW_QIXI_ACTIVITY ? ['qixi_dew_use', 'qixi_bridge_build', 'qixi_sachet_gift', 'qixi_friend_priority'] : []),
         ]
@@ -742,12 +753,25 @@ watch(() => props.currentAccountId, () => {
               <div v-else-if="activeModule === 'events'" class="space-y-4">
                 <!-- Keep preferences editable independently of live event availability. -->
                 <section class="border border-gray-200/90 rounded-xl bg-white/55 p-4 space-y-3 dark:border-gray-700">
-                  <h3 class="text-sm text-gray-700 font-medium dark:text-gray-300">牧歌初启</h3>
+                  <h3 class="text-sm text-gray-700 font-medium dark:text-gray-300">
+                    牧歌初启
+                  </h3>
                   <div class="grid gap-3 sm:grid-cols-2">
                     <BaseSwitch v-for="item in mugeSettings" :key="item.key" v-model="automation.automation[item.key]" :label="item.label" :disabled="saving" />
                   </div>
                   <p class="text-xs text-gray-500 dark:text-gray-400">
                     开关可以提前设置，自动化仅在活动开放时运行。「自动答题并领取」保留已保存的答案，未答题目默认选第一项，完整保存后再结算领取；不清空进度，已结算不重复提交。
+                  </p>
+                </section>
+                <section class="border border-gray-200/90 rounded-xl bg-white/55 p-4 space-y-3 dark:border-gray-700">
+                  <h3 class="text-sm text-gray-700 font-medium dark:text-gray-300">
+                    以薯换福
+                  </h3>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <BaseSwitch v-for="item in sweetPotatoSettings" :key="item.key" v-model="automation.automation[item.key]" :label="item.label" :disabled="saving" />
+                  </div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    总开关关闭时以下动作全部不执行。开启后巡田发现空地会优先种红薯；蜜薯收完先挑好友铺子最高价出售，额度不足再卖自家。分享暴击需要手动在手机上分享一次，机器人不代做。
                   </p>
                 </section>
                 <section class="border border-gray-200/90 rounded-xl bg-white/55 p-4 space-y-3 dark:border-gray-700">
@@ -995,16 +1019,23 @@ watch(() => props.currentAccountId, () => {
   max-height: calc(100dvh - 2rem);
 }
 .feature-config-modal > header,
-.feature-config-modal > footer { flex-shrink: 0; }
-.feature-config-modal > div { overscroll-behavior: contain; scrollbar-gutter: stable; }
+.feature-config-modal > footer {
+  flex-shrink: 0;
+}
+.feature-config-modal > div {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .settings-frost-button {
   border: 1px solid color-mix(in srgb, var(--theme-primary) 25%, rgba(255, 255, 255, 0.8)) !important;
-  box-shadow: 0 3px 14px color-mix(in srgb, var(--theme-primary) 12%, transparent), inset 0 1px 1px rgba(255, 255, 255, 0.65) !important;
+  box-shadow:
+    0 3px 14px color-mix(in srgb, var(--theme-primary) 12%, transparent),
+    inset 0 1px 1px rgba(255, 255, 255, 0.65) !important;
   backdrop-filter: blur(16px) saturate(1.2);
 }
 .account-feature-settings .settings-frost-button {
   color: var(--theme-primary) !important;
-  background: color-mix(in srgb, var(--theme-primary) 9%, rgba(255,255,255,0.7)) !important;
+  background: color-mix(in srgb, var(--theme-primary) 9%, rgba(255, 255, 255, 0.7)) !important;
 }
 
 /* 账号设置里的功能配置弹窗：与其他页面统一为半透明白色（不再叠加蓝→绿渐变色调），
