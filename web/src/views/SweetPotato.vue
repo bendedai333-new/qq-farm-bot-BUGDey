@@ -266,116 +266,115 @@ onMounted(async () => {
 
 <template>
   <div class="flex flex-col gap-4 p-4">
-    <section class="border rounded-xl p-4" style="background: var(--theme-card, #ffffff)">
+    <section class="border border-white/60 rounded-2xl bg-white/60 p-4 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-800/60">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 class="text-lg font-semibold">
             {{ activity?.name || '以薯换福' }}
-            <span class="ml-2 rounded px-2 py-0.5 text-xs" style="background: #e8f5e9; color: #2e7d32">{{ phaseText }}</span>
+            <span class="ml-2 rounded-full bg-emerald-100/90 px-2.5 py-0.5 text-xs text-emerald-900 font-medium backdrop-blur-sm dark:bg-emerald-500/20 dark:text-emerald-200">{{ phaseText }}</span>
           </h1>
-          <p class="mt-1 text-xs opacity-60">
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {{ windowText }}
           </p>
         </div>
         <div class="flex gap-2">
-          <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="loadActivity">
+          <button class="border border-white/70 rounded-lg bg-white/55 px-3 py-1.5 text-sm text-gray-700 shadow-sm backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-200 dark:hover:bg-white/15" :disabled="!!busy" @click="loadActivity">
             刷新
           </button>
-          <button class="rounded-lg px-3 py-1.5 text-sm text-white" style="background: #2e7d32" :disabled="!!busy" @click="claimSeed">
+          <button class="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white shadow-sm transition hover:bg-emerald-700" :disabled="!!busy" @click="claimSeed">
             领种子
           </button>
         </div>
       </div>
 
       <div class="grid grid-cols-2 mt-4 gap-3 text-sm md:grid-cols-4">
-        <div class="rounded-lg p-3" style="background: #f6f8f6">
-          <div class="text-xs opacity-60">
+        <div class="border border-white/50 rounded-xl bg-white/50 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             自家收购价
           </div>
           <div class="text-lg font-semibold">
             {{ activity?.price?.unit ?? '—' }}
           </div>
-          <div class="text-xs opacity-60">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             基础 {{ activity?.price?.base ?? 0 }} + 暴击 {{ activity?.price?.boost ?? 0 }}
           </div>
         </div>
-        <div class="rounded-lg p-3" style="background: #f6f8f6">
-          <div class="text-xs opacity-60">
+        <div class="border border-white/50 rounded-xl bg-white/50 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             福气币
           </div>
           <div class="text-lg font-semibold">
             {{ activity?.coinBalance ?? 0 }}
           </div>
-          <div class="text-xs opacity-60">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             待领佣金 {{ activity?.pendingCommission?.coin ?? 0 }}
           </div>
         </div>
-        <div class="rounded-lg p-3" style="background: #f6f8f6">
-          <div class="text-xs opacity-60">
+        <div class="border border-white/50 rounded-xl bg-white/50 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             红薯种子
           </div>
           <div class="text-lg font-semibold">
             {{ activity?.bag?.seed ?? 0 }}
           </div>
-          <div class="text-xs opacity-60">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             {{ activity?.seedClaimed ? '今日已领' : '今日未领' }}
           </div>
         </div>
-        <div class="rounded-lg p-3" style="background: #f6f8f6">
-          <div class="text-xs opacity-60">
+        <div class="border border-white/50 rounded-xl bg-white/50 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             蜜薯
           </div>
           <div class="text-lg font-semibold">
             {{ activity?.bag?.crop ?? 0 }}
           </div>
-          <div class="text-xs opacity-60">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
             {{ activity?.shared ? '今日已分享' : '今日未分享' }}
           </div>
         </div>
       </div>
 
       <div class="mt-4 flex flex-wrap gap-2">
-        <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="plantPotato">
+        <button class="border border-white/70 rounded-lg bg-white/55 px-3 py-1.5 text-sm text-gray-700 shadow-sm backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-200 dark:hover:bg-white/15" :disabled="!!busy" @click="plantPotato">
           种植红薯（最多 4 块）
         </button>
-        <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="harvestPotato">
+        <button class="border border-white/70 rounded-lg bg-white/55 px-3 py-1.5 text-sm text-gray-700 shadow-sm backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-200 dark:hover:bg-white/15" :disabled="!!busy" @click="harvestPotato">
           收获红薯
         </button>
-        <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="sellAll">
+        <button class="border border-white/70 rounded-lg bg-white/55 px-3 py-1.5 text-sm text-gray-700 shadow-sm backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-200 dark:hover:bg-white/15" :disabled="!!busy" @click="sellAll">
           出售全部蜜薯（自家）
         </button>
         <button
           v-if="bestShop"
-          class="rounded-lg px-3 py-1.5 text-sm text-white"
-          style="background: #1565c0"
+          class="rounded-lg bg-sky-600 px-3 py-1.5 text-sm text-white shadow-sm transition hover:bg-sky-700"
           :disabled="!!busy"
           @click="sellToBest"
         >
           卖最高价 {{ bestShop.name || '好友' }}（{{ bestShop.unitPrice }}）
         </button>
-        <button class="border rounded-lg px-3 py-1.5 text-sm" :disabled="!!busy" @click="claimCommission">
+        <button class="border border-white/70 rounded-lg bg-white/55 px-3 py-1.5 text-sm text-gray-700 shadow-sm backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-200 dark:hover:bg-white/15" :disabled="!!busy" @click="claimCommission">
           领取佣金
         </button>
       </div>
-      <p v-if="busy" class="mt-2 text-xs opacity-60">
+      <p v-if="busy" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
         正在执行：{{ busy }}…
       </p>
-      <p v-if="loading" class="mt-2 text-xs opacity-60">
+      <p v-if="loading" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
         加载中…
       </p>
     </section>
 
-    <section class="border rounded-xl p-4" style="background: var(--theme-card, #ffffff)">
+    <section class="border border-white/60 rounded-2xl bg-white/60 p-4 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-800/60">
       <div class="flex items-center justify-between">
-        <h2 class="font-semibold">
+        <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">
           好友铺子收购价
         </h2>
-        <button class="border rounded px-2 py-1 text-xs" :disabled="!!busy" @click="loadShops">
+        <button class="border border-white/70 rounded-lg bg-white/50 px-2 py-1 text-xs text-gray-600 backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-300" :disabled="!!busy" @click="loadShops">
           重新查询（共 {{ shopsTotal }} 位好友）
         </button>
       </div>
       <table class="mt-3 w-full text-sm">
-        <thead class="text-xs opacity-60">
+        <thead class="text-xs text-gray-500 dark:text-gray-400">
           <tr>
             <th class="py-1 text-left">
               好友
@@ -395,7 +394,7 @@ onMounted(async () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="shop in shops" :key="shop.targetGid" class="border-t">
+          <tr v-for="shop in shops" :key="shop.targetGid" class="border-t border-white/40 dark:border-white/10">
             <td class="py-1">
               {{ shop.name || shop.targetGid }}
               <span v-if="shop.error" class="text-xs" style="color: #d32f2f">（{{ shop.error }}）</span>
@@ -414,7 +413,7 @@ onMounted(async () => {
             </td>
           </tr>
           <tr v-if="!shops.length">
-            <td colspan="5" class="py-3 text-center text-xs opacity-60">
+            <td colspan="5" class="py-3 text-center text-xs text-gray-400">
               暂无数据
             </td>
           </tr>
@@ -422,17 +421,17 @@ onMounted(async () => {
       </table>
     </section>
 
-    <section class="border rounded-xl p-4" style="background: var(--theme-card, #ffffff)">
+    <section class="border border-white/60 rounded-2xl bg-white/60 p-4 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-800/60">
       <div class="flex items-center justify-between">
-        <h2 class="font-semibold">
+        <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">
           兑换商店
         </h2>
-        <button class="border rounded px-2 py-1 text-xs" :disabled="!!busy" @click="loadGoods">
+        <button class="border border-white/70 rounded-lg bg-white/50 px-2 py-1 text-xs text-gray-600 backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-300" :disabled="!!busy" @click="loadGoods">
           刷新目录
         </button>
       </div>
       <table class="mt-3 w-full text-sm">
-        <thead class="text-xs opacity-60">
+        <thead class="text-xs text-gray-500 dark:text-gray-400">
           <tr>
             <th class="py-1 text-left">
               商品
@@ -455,7 +454,7 @@ onMounted(async () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in goods" :key="item.id" class="border-t">
+          <tr v-for="item in goods" :key="item.id" class="border-t border-white/40 dark:border-white/10">
             <td class="py-1">
               {{ item.name || (`#${item.id}`) }}
             </td>
@@ -473,7 +472,7 @@ onMounted(async () => {
             </td>
             <td class="text-right">
               <button
-                class="border rounded px-2 py-0.5 text-xs"
+                class="border border-white/70 rounded-md bg-white/60 px-2 py-0.5 text-xs text-gray-700 backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-200"
                 :disabled="!!busy || (item.remaining !== null && item.remaining <= 0)"
                 @click="exchangeGoods(item)"
               >
@@ -482,28 +481,28 @@ onMounted(async () => {
             </td>
           </tr>
           <tr v-if="!goods.length">
-            <td colspan="6" class="py-3 text-center text-xs opacity-60">
+            <td colspan="6" class="py-3 text-center text-xs text-gray-400">
               暂无数据
             </td>
           </tr>
         </tbody>
       </table>
-      <p class="mt-2 text-xs opacity-50">
+      <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
         兑换会真实消耗福气币，点击后会先确认数量与总价；实际获得物以服务端回包为准，展示的商品名来自抓包提示（1~6），7 号以后只显示编号。
       </p>
     </section>
 
-    <section class="border rounded-xl p-4" style="background: var(--theme-card, #ffffff)">
+    <section class="border border-white/60 rounded-2xl bg-white/60 p-4 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-800/60">
       <div class="flex items-center justify-between">
-        <h2 class="font-semibold">
+        <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">
           收购记录
         </h2>
-        <button class="border rounded px-2 py-1 text-xs" :disabled="!!busy" @click="loadRecords">
+        <button class="border border-white/70 rounded-lg bg-white/50 px-2 py-1 text-xs text-gray-600 backdrop-blur-sm transition dark:border-white/10 dark:bg-white/10 hover:bg-white/85 dark:text-gray-300" :disabled="!!busy" @click="loadRecords">
           刷新
         </button>
       </div>
       <table class="mt-3 w-full text-sm">
-        <thead class="text-xs opacity-60">
+        <thead class="text-xs text-gray-500 dark:text-gray-400">
           <tr>
             <th class="py-1 text-left">
               时间
@@ -523,7 +522,7 @@ onMounted(async () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, index) in records" :key="index" class="border-t">
+          <tr v-for="(row, index) in records" :key="index" class="border-t border-white/40 dark:border-white/10">
             <td class="py-1 text-xs">
               {{ new Date(row.timestamp).toLocaleString('zh-CN', { hour12: false }) }}
             </td>
@@ -539,7 +538,7 @@ onMounted(async () => {
             </td>
           </tr>
           <tr v-if="!records.length">
-            <td colspan="5" class="py-3 text-center text-xs opacity-60">
+            <td colspan="5" class="py-3 text-center text-xs text-gray-400">
               还没有收购记录
             </td>
           </tr>
@@ -547,11 +546,11 @@ onMounted(async () => {
       </table>
     </section>
 
-    <section v-if="activity?.rules?.length" class="border rounded-xl p-4" style="background: var(--theme-card, #ffffff)">
+    <section v-if="activity?.rules?.length" class="border border-white/60 rounded-2xl bg-white/60 p-4 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-800/60">
       <h2 class="mb-2 font-semibold">
         活动规则
       </h2>
-      <p v-for="(line, index) in activity.rules" :key="index" class="text-xs leading-6 opacity-80">
+      <p v-for="(line, index) in activity.rules" :key="index" class="text-xs text-gray-600 leading-6 dark:text-gray-300">
         {{ line }}
       </p>
     </section>
