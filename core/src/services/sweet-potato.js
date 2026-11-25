@@ -13,7 +13,7 @@
  */
 const { types } = require('../utils/proto');
 const { sendMsgAsync, getUserState } = require('../utils/network');
-const { toNum, getServerTimeSec, toLong } = require('../utils/utils');
+const { toNum, getServerTimeSec } = require('../utils/utils');
 const { getBag, getBagItems } = require('./warehouse');
 const { getItemById, getItemImageById } = require('../config/gameConfig');
 const { getFriendsList } = require('./friend');
@@ -390,31 +390,43 @@ async function harvestSweetPotato() {
         }
         // 不用 farmApi.harvest：它硬编码 is_all=true，可能把全部成熟作物一起收掉。
         // 这里显式 is_all=false + 只传红薯地块，避免动到其他作物。
-        const ownGid = toLong((getUserState() || {}).gid);
-        const harvestPayload = types.HarvestRequest.encode(types.HarvestRequest.create({
-            land_ids: targets,
-            host_gid: ownGid,
-            is_all: false,
-        })).finish();
-        await sendMsgAsync('gamepb.plantpb.PlantService', 'Harvest', harvestPayload);
+        // 用 farmApi.harvest：现网验证过的写法（is_all=true + 明确 land_ids）。
+        // 之前用 is_all=false，服务端不认，地块原样保留。
+        const harvestReply = await farmApi.harvest(targets);
+        const replyLands = Array.isArray(harvestReply && harvestReply.land) ? harvestReply.land : [];
+        const replyIds = new Set(replyLands.map((land) => toNum(land && land.id)).filter(Boolean));
+        const covered = targets.every((id) => replyIds.has(toNum(id)));
         // 以服务端最新土地状态确认收获，不依赖回包结构
-        const latest = await farmApi.getAllLands();
-        const latestList = Array.isArray(latest && latest.lands) ? latest.lands : [];
-        const stillThere = latestList
-            .filter((land) => land && land.plant && toNum(land.plant.id) === SWEET_POTATO_PLANT_ID)
-            .map((land) => toNum(land.id))
-            .filter((id) => targets.includes(id));
-        if (stillThere.length) {
-            fail('SWEET_POTATO_RESULT_UNKNOWN',
-                `红薯收获状态未确认（仍在成熟的地块: ${  stillThere.join(',')  }），请刷新后再决定是否重试`);
+        // 收获后服务端常保留空壳植物，要再铲一次才真正腾出地块（自动化里也是这么做的）
+        let cleaned = 0;
+        try {
+            const latest = await farmApi.getAllLands();
+            const latestList = Array.isArray(latest && latest.lands) ? latest.lands : [];
+            const leftovers = latestList
+                .filter((land) => land && land.plant && toNum(land.plant.id) === SWEET_POTATO_PLANT_ID)
+                .map((land) => toNum(land.id))
+                .filter((id) => targets.includes(id));
+            if (leftovers.length) {
+                await farmApi.removePlant(leftovers);
+                cleaned = leftovers.length;
+            }
+        } catch {
+            cleaned = 0;
         }
         const after = await getSweetPotatoActivity();
+        const cropGain = after.bag.crop - before.bag.crop;
+        // 判定：蜜薯有增加，或回包覆盖了全部目标地块；两者都不成立才算未确认
+        if (cropGain <= 0 && !covered) {
+            fail('SWEET_POTATO_RESULT_UNKNOWN',
+                `红薯收获状态未确认（蜜薯未增加；回包地块 ${  [...replyIds].join(',')  }，目标 ${  targets.join(',')  }），请刷新后再决定是否重试`);
+        }
         return {
             status: 'confirmed',
             harvested: targets.length,
             landIds: targets,
             removed,
-            cropGain: after.bag.crop - before.bag.crop,
+            cleaned,
+            cropGain,
             bag: after.bag,
             activity: after,
         };
