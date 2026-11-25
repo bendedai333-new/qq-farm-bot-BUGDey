@@ -157,6 +157,7 @@ async function getSweetPotatoActivity() {
         },
         bag,
         bagError,
+        automation: readAutomationFlags(),
         rules: parseRules(head.extra),
     };
 }
@@ -634,6 +635,17 @@ async function getSweetPotatoFriendShops(input) {
 
 const AUTO_SELL_INTERVAL_MS = 5 * 60 * 1000;
 let lastAutoSellAt = 0;
+
+function readAutomationFlags() {
+    const store = require('../models/store');
+    const automation = (typeof store.getAutomation === 'function' ? store.getAutomation() : {}) || {};
+    return {
+        master: automation.sweet_potato === true,
+        claim: automation.sweet_potato_claim !== false,
+        plant: automation.sweet_potato_plant !== false,
+        sell: automation.sweet_potato_sell !== false,
+    };
+}
 
 function autoPartEnabled(part) {
     const store = require('../models/store');

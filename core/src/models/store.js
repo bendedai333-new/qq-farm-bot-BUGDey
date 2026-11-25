@@ -264,6 +264,11 @@ const FERTILIZER_LAND_TYPE_SET = new Set(DEFAULT_FERTILIZER_LAND_TYPES);
 
 /** 默认自动化配置 */
 const DEFAULT_AUTOMATION = {
+    // 以薯换福：总开关默认关闭，子开关默认开启（只有显式关闭才停）
+    sweet_potato: false,
+    sweet_potato_claim: true,
+    sweet_potato_plant: true,
+    sweet_potato_sell: true,
     farm: true,
     farm_push: true,
     land_upgrade: false,

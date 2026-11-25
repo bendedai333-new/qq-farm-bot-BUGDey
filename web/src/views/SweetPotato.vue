@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import api from '@/api'
+import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 import { useToastStore } from '@/stores/toast'
 
 interface SweetPotatoPrice {
@@ -22,6 +23,7 @@ interface SweetPotatoActivity {
   price: SweetPotatoPrice
   pendingCommission: { coin: number, count: number }
   bag: { seed: number, crop: number, coin: number }
+  automation: { master: boolean, claim: boolean, plant: boolean, sell: boolean }
   rules: string[]
 }
 
@@ -65,6 +67,7 @@ const goods = ref<SweetPotatoGoods[]>([])
 const shops = ref<SweetPotatoShop[]>([])
 const shopsTotal = ref(0)
 const records = ref<PurchaseRecord[]>([])
+const auto = ref<{ master: boolean, claim: boolean, plant: boolean, sell: boolean }>({ master: false, claim: true, plant: true, sell: true })
 
 const phaseText = computed(() => {
   const phase = activity.value?.phase || ''
@@ -105,6 +108,8 @@ async function loadActivity() {
     return
   }
   activity.value = data.activity as SweetPotatoActivity
+  if (data.activity?.automation)
+    auto.value = { ...data.activity.automation }
 }
 
 async function loadGoods() {
@@ -129,6 +134,33 @@ async function loadRecords() {
 
 async function post(path: string, body: Record<string, unknown> = {}) {
   return run(path, async () => (await api.post(`/api/activity/sweet-potato${path}`, body)).data)
+}
+
+async function saveAutomation(patch: Record<string, boolean>) {
+  busy.value = 'automation'
+  try {
+    const res = await api.post('/api/automation', patch)
+    const data = res.data
+    if (data?.ok) {
+      const next = data.data?.automation || {}
+      auto.value = {
+        master: next.sweet_potato === true,
+        claim: next.sweet_potato_claim !== false,
+        plant: next.sweet_potato_plant !== false,
+        sell: next.sweet_potato_sell !== false,
+      }
+      toast.success('已保存')
+    }
+    else {
+      toast.error(data?.error || '保存失败')
+    }
+  }
+  catch (error) {
+    toast.error((error as Error)?.message || '保存失败')
+  }
+  finally {
+    busy.value = ''
+  }
 }
 
 async function claimSeed() {
@@ -361,6 +393,24 @@ onMounted(async () => {
       </p>
       <p v-if="loading" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
         加载中…
+      </p>
+    </section>
+
+    <section class="border border-white/60 rounded-2xl bg-white/60 p-4 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-gray-800/60">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">
+          自动化
+        </h2>
+        <span class="text-xs text-gray-500 dark:text-gray-400">{{ auto.master ? '运行中' : '已关闭' }}</span>
+      </div>
+      <div class="grid mt-3 gap-3 sm:grid-cols-2">
+        <BaseSwitch :model-value="auto.master" label="启用自动以薯换福" :disabled="!!busy" @update:model-value="(v: boolean | undefined) => saveAutomation({ sweet_potato: v === true })" />
+        <BaseSwitch :model-value="auto.claim" label="自动领取每日种子" :disabled="!!busy || !auto.master" @update:model-value="(v: boolean | undefined) => saveAutomation({ sweet_potato_claim: v === true })" />
+        <BaseSwitch :model-value="auto.plant" label="自动种植/收获红薯" :disabled="!!busy || !auto.master" @update:model-value="(v: boolean | undefined) => saveAutomation({ sweet_potato_plant: v === true })" />
+        <BaseSwitch :model-value="auto.sell" label="自动出售蜜薯（好友高价优先）" :disabled="!!busy || !auto.master" @update:model-value="(v: boolean | undefined) => saveAutomation({ sweet_potato_sell: v === true })" />
+      </div>
+      <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+        总开关关闭时以下动作全部不执行。开启后巡田发现空地会优先种红薯；蜜薯收完先挑好友铺子最高价，额度不足再卖自家。
       </p>
     </section>
 
