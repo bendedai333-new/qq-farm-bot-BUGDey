@@ -59,6 +59,9 @@ function createWorkerManager(deps) {
         operateMilkTea: 180000,
         milkTeaRecords: 90000,
         getPetDiary: 90000,
+        // 以薯换福：读活动组 + 读背包，两次网关往返，10 秒默认值偏紧。
+        getSweetPotatoActivity: 30000,
+        getSweetPotatoShop: 30000,
         operatePetDiary: 180000,
         // 牧歌初启一次操作 = 读快照 → 提交 → 再读快照，10 秒默认值会误判超时。
         getMugeActivity: 90000,

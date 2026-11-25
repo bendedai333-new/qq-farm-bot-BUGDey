@@ -2371,6 +2371,16 @@ async function handleApiCallInScene(msg) {
                 result = await getRainPoemActivity();
                 break;
             }
+            case 'getSweetPotatoActivity': {
+                const { getSweetPotatoActivity } = require('../services/sweet-potato');
+                result = await getSweetPotatoActivity();
+                break;
+            }
+            case 'getSweetPotatoShop': {
+                const { getSweetPotatoShop } = require('../services/sweet-potato');
+                result = await getSweetPotatoShop(args[0]);
+                break;
+            }
             case 'buyRainPoemCollectionBottle': {
                 const { buyRainPoemCollectionBottle } = require('../services/activity');
                 result = await buyRainPoemCollectionBottle();

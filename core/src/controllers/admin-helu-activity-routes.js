@@ -49,6 +49,26 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  // 以薯换福（只读阶段）：活动状态 + 铺子收购价，不含任何写操作。
+  app.get('/api/activity/sweet-potato', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取以薯换福失败: 账号未运行')) return;
+      res.json({ ok: true, activity: await provider.getSweetPotatoActivity(accountId) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.get('/api/activity/sweet-potato/shop', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '查询铺子报价失败: 账号未运行')) return;
+      const gid = req.query.gid ? String(req.query.gid) : '';
+      res.json({ ok: true, shop: await provider.getSweetPotatoShop(accountId, gid || undefined) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.get('/api/activity/pet-diary', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;

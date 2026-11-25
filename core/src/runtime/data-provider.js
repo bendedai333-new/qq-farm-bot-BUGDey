@@ -276,6 +276,8 @@ function createDataProvider(deps) {
         sendQixiSachet: (ref, friendGid, count) => callWorkerApi(resolveAccountId(ref), 'sendQixiSachet', friendGid, count),
         useQixiDew: (ref, options) => callWorkerApi(resolveAccountId(ref), 'useQixiDew', options),
         getRainPoemActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getRainPoemActivity'),
+        getSweetPotatoActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getSweetPotatoActivity'),
+        getSweetPotatoShop: (ref, gid) => callWorkerApi(resolveAccountId(ref), 'getSweetPotatoShop', gid),
         buyRainPoemCollectionBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'buyRainPoemCollectionBottle'),
         collectRainPoemWeather: (ref) => callWorkerApi(resolveAccountId(ref), 'collectRainPoemWeather'),
         useRainPoemSummonBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'useRainPoemSummonBottle'),
