@@ -2,6 +2,7 @@
 import type { ActivityLabels, ActivitySection, ActivitySectionKey } from '@/components/activity/types'
 import { storeToRefs } from 'pinia'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '@/api'
 import CharityFlowerActivityPanel from '@/components/activity/CharityFlowerActivityPanel.vue'
 import HeluExchangePanel from '@/components/activity/HeluExchangePanel.vue'
@@ -117,7 +118,17 @@ const wishSignActivityActive = computed(() => isWithinActivityWindowMs(WISH_SIGN
 const shareRewardActivityActive = computed(() => isWithinActivityWindowMs(SHARE_REWARD_ACTIVITY_WINDOW, nowMs.value))
 const petDiaryActivityActive = computed(() => isWithinActivityWindowMs(PET_DIARY_ACTIVITY_WINDOW, nowMs.value))
 const qingmeiActivity = computed(() => activity.value?.qingmei || null)
+const router = useRouter()
 const selectedActivity = ref<string | null>(null)
+
+// 以薯换福有独立页面，卡片直接跳转，不进入内嵌面板。
+function openActivityCard(card: { key: string, adaptedKey: string | null }) {
+  if (card.adaptedKey === 'sweet-potato') {
+    router.push('/sweet-potato')
+    return
+  }
+  selectedActivity.value = card.key
+}
 const activityStatusFilter = ref<'active' | 'upcoming' | 'ended'>('active')
 const activeSection = ref<ActivitySectionKey>('journey')
 const activityDirectoryWindows = ref<Array<{ id: number, title: string, startTime: number, endTime: number, imageUrl?: string }>>([])
@@ -224,10 +235,14 @@ const activityCards = computed(() => {
             ? 'charity-flower' as const
             : null
     // 牧歌初启的分组 id 可能就是 2026111700，也可能只在子活动里出现，两种都算。
-    const isMuge = group.id === 2026111700 || group.activityIds.includes(2026111700) || group.activityIds.some(id => String(id).startsWith('202611170'))
+    // 以薯换福：组 2026111707 / 主玩法 2026111708 / 子活动 2026111709。
+    // 必须排在 isMuge 之前——牧歌用 startsWith('202611170') 前缀匹配，会把本活动一起吞掉。
+    const SWEET_POTATO_IDS = ['2026111707', '2026111708', '2026111709']
+    const isSweetPotato = group.id === 2026111707 || group.activityIds.some(id => SWEET_POTATO_IDS.includes(String(id)))
+    const isMuge = !isSweetPotato && (group.id === 2026111700 || group.activityIds.includes(2026111700) || group.activityIds.some(id => String(id).startsWith('202611170')))
     // 故友重逢：父活动 2026111800、子活动 2026111801，只读展示，不做任何召回/领奖动作。
     const isFriendRecall = group.id === 2026111800 || group.activityIds.includes(2026111800) || group.activityIds.includes(2026111801) || group.activityIds.some(id => String(id).startsWith('202611180'))
-    const adapted = isMuge ? 'muge' as const : isFriendRecall ? 'friend-recall' as const : group.activityIds.includes(2026110100) ? 'milk-tea' as const : group.activityIds.includes(2026092400) ? 'wish-sign' as const : group.activityIds.includes(2026092500) ? 'share-reward' as const : adaptedKey
+    const adapted = isSweetPotato ? 'sweet-potato' as const : isMuge ? 'muge' as const : isFriendRecall ? 'friend-recall' as const : group.activityIds.includes(2026110100) ? 'milk-tea' as const : group.activityIds.includes(2026092400) ? 'wish-sign' as const : group.activityIds.includes(2026092500) ? 'share-reward' as const : adaptedKey
     const window = { startMs: group.startTime * 1000, endMs: group.endTime * 1000 }
     const hue = Math.abs(group.id * 37) % 360
     return {
@@ -237,9 +252,11 @@ const activityCards = computed(() => {
       adaptedKey: adapted,
       title: adapted === 'pet-diary' ? '萌宠日记' : adapted === 'friend-recall' ? '故友重逢' : group.title || `活动 ${group.id}`,
       description: adapted
-        ? adapted === 'muge'
-          ? '兴牧庆典、牧友同行、成长手册与牧场人格测试'
-          : adapted === 'friend-recall' ? '召回老友领奖 · 社交互动掉落重逢礼包' : adapted === 'milk-tea' ? '经营奶茶小店、兑换商店与兼职工作' : adapted === 'pet-diary' ? '查看比熊成长、爪印手记、拾物小铺与比熊赠礼' : adapted === 'charity-flower' ? '查看爱心、公益进度与奖励状态' : adapted === 'qing-mei' ? '领取青梅种子、精酿并售卖青梅酿' : adapted === 'wish-sign' ? '查看祈愿状态、祈愿池和每日奖励' : adapted === 'share-reward' ? '查看每日快乐值与档位进度' : '查看天气、每日进度与气象研究'
+        ? adapted === 'sweet-potato'
+          ? '领红薯种子、种植收获、出售蜜薯换福气币'
+          : adapted === 'muge'
+            ? '兴牧庆典、牧友同行、成长手册与牧场人格测试'
+            : adapted === 'friend-recall' ? '召回老友领奖 · 社交互动掉落重逢礼包' : adapted === 'milk-tea' ? '经营奶茶小店、兑换商店与兼职工作' : adapted === 'pet-diary' ? '查看比熊成长、爪印手记、拾物小铺与比熊赠礼' : adapted === 'charity-flower' ? '查看爱心、公益进度与奖励状态' : adapted === 'qing-mei' ? '领取青梅种子、精酿并售卖青梅酿' : adapted === 'wish-sign' ? '查看祈愿状态、祈愿池和每日奖励' : adapted === 'share-reward' ? '查看每日快乐值与档位进度' : '查看天气、每日进度与气象研究'
         : ACTIVITY_CLIENT_PREVIEWS.some(item => item.title === group.title || item.ids.some(id => group.activityIds.includes(id)))
           ? '已读取客户端静态预览，动态规则待服务端开放'
           : '暂未适配详情',
@@ -254,6 +271,7 @@ const activityCards = computed(() => {
         'rain-poem': 'i-carbon-rain-heavy',
         'wish-sign': 'i-carbon-sun',
         'share-reward': 'i-carbon-share',
+        'sweet-potato': 'i-carbon-sprout',
       }[adapted || ''] || 'i-carbon-calendar',
       image: adapted === 'muge' ? '/activity/muge/icon.png' : adapted === 'milk-tea' ? '/activity/milk-tea/img_s4Main_bg.png' : adapted === 'pet-diary' ? '/activity/pet-diary/scene-home-adult.webp?v=20260912' : adapted === 'wish-sign' ? '/activity/wish-sign/card-bg.svg' : adapted === 'share-reward' ? '/activity/share-reward/card-bg.svg' : group.imageUrl || (adapted === 'rain-poem' ? '/activity/rain-poem/day-rain-bg.jpg' : ''),
       imagePosition: adapted === 'pet-diary' ? 'center 64%' : 'center',
@@ -610,7 +628,7 @@ onUnmounted(() => {
           class="group relative min-h-52 overflow-hidden rounded-lg text-left text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cyan-500"
           :class="[{ 'muge-directory-card': card.adaptedKey === 'muge' }, card.status === 'ended' ? 'cursor-not-allowed grayscale saturate-0' : 'hover:-translate-y-0.5 hover:shadow-lg']"
           :disabled="card.status === 'ended'"
-          @click="selectedActivity = card.key"
+          @click="openActivityCard(card)"
         >
           <div v-if="card.adaptedKey === 'muge'" class="muge-directory-card__art" aria-hidden="true">
             <img :src="card.image" alt="">
