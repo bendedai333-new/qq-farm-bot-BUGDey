@@ -999,7 +999,7 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, lands = []) {
   }
   const size2Result = await plantPrioritized2x2Crops(allEmptyLands, lands, accountId);
   const reservedLandSet = new Set(size2Result.reservedLandIds || []);
-  const normalEmptyLands = allEmptyLands.filter(id => !reservedLandSet.has(Number(id)));
+  let normalEmptyLands = allEmptyLands.filter(id => !reservedLandSet.has(Number(id)));
   result.reservedLandIds = [...reservedLandSet];
   result.plantedLands.push(...(size2Result.plantedMasterIds || []));
   result.plantedCount += Number(size2Result.plantedCount || 0);
@@ -1011,6 +1011,27 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, lands = []) {
 
   if (allEmptyLands.length === 0) return result;
   if (normalEmptyLands.length === 0) return result;
+
+  // 以薯换福：活动期优先用背包里的红薯种子占空地，剩余空地再走原有策略。
+  // 默认关闭（automation.sweet_potato 不为 true 时直接跳过），失败不影响原有种植。
+  try {
+    const sweetPotato = require('./sweet-potato');
+    if (sweetPotato.autoPartEnabled('plant')) {
+      const eventResult = await sweetPotato.autoPlantSweetPotato(normalEmptyLands);
+      if (eventResult && eventResult.planted > 0) {
+        result.plantedLands.push(...eventResult.plantedLandIds);
+        result.plantedCount += eventResult.planted;
+        log('以薯换福', `自动种植红薯 ${eventResult.planted} 块`, {
+          module: 'farm', event: '以薯换福种植', result: 'ok', count: eventResult.planted, landIds: eventResult.plantedLandIds
+        });
+        await runFertilizerByConfig(eventResult.plantedLandIds);
+        normalEmptyLands = eventResult.remainingLandIds;
+      }
+    }
+  } catch (eventError) {
+    logWarn('以薯换福', `红薯补种跳过：${eventError.message}`);
+  }
+  if (!normalEmptyLands.length) return result;
 
   // 背包优先策略
   if (strategy === 'bag_priority') {
